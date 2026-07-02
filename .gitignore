@@ -1,0 +1,15 @@
+# 密钥与本地环境
+.env
+
+# 运行产物
+output/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 本地私有配置（如需把收件人/源单独留在本地，用此文件名覆盖）
+config.local.yaml

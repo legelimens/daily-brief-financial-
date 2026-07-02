@@ -1,0 +1,90 @@
+# ============================================================
+# TriBrief 配置示例。复制为 config.yaml 后按需修改。
+# 密钥（LLM key、SMTP 密码）一律走环境变量，严禁写在这里。
+# ============================================================
+
+# RSSHub 自建实例的根地址（供 B 层源使用 ${RSSHUB_BASE} 引用）。
+# 部署 RSSHub 后填这里：http://your-server:1200
+rsshub_base: "http://localhost:1200"
+
+ai:
+  base_url: "https://api.deepseek.com/v1"   # OpenAI 兼容接口；豆包/OpenAI/Ollama 同理改这里
+  model: "deepseek-chat"
+  api_key_env: "LLM_API_KEY"                # 密钥从此环境变量读取（不是把密钥写在这）
+  temperature: 0.3
+
+filtering:
+  time_window_hours: 72      # 抓取最近多少小时内发布的条目
+  score_threshold: 6.0       # 重要性低于此分的条目丢弃（源接多、噪音大时可调到 6.5~7）
+  max_per_track: 4           # 每个赛道最多保留几条
+
+# ------------------------------------------------------------
+# 源清单：按赛道分组，每条 { name, url, region }
+#   region: global=国外 / cn=国内
+# A 层（国外原生 RSS）开箱可用；构建时逐个实测，失效的注释掉。
+# B 层（国内）需自建 RSSHub，部署后取消注释即可。
+# ------------------------------------------------------------
+sources:
+  # ================================================================
+  # 芯片 / 算力
+  # ================================================================
+  chip:
+    # -- A 层：国外原生 RSS（开箱可用）--
+    - { name: "IEEE Spectrum 半导体", url: "https://spectrum.ieee.org/feeds/topic/semiconductors.rss", region: "global" }
+    - { name: "EE Times",            url: "https://www.eetimes.com/feed/",        region: "global" }
+    - { name: "EDN",                 url: "https://www.edn.com/feed/",            region: "global" }
+    - { name: "Tom's Hardware",      url: "https://www.tomshardware.com/feeds/all", region: "global" }
+    - { name: "TechXplore 半导体",   url: "https://techxplore.com/rss-feed/semiconductors-news/", region: "global" }
+    - { name: "arXiv cs.AR 硬件架构", url: "http://export.arxiv.org/rss/cs.AR",    region: "global" }
+    # -- B 层：国内源（需 RSSHub。部署后取消注释，路由以 https://docs.rsshub.app 为准）--
+    # - { name: "半导体行业观察", url: "${RSSHUB_BASE}/wechat/mp/profile/...", region: "cn" }
+    # - { name: "芯东西",         url: "${RSSHUB_BASE}/wechat/mp/profile/...", region: "cn" }
+    # - { name: "集微网",         url: "${RSSHUB_BASE}/jiwei/...",             region: "cn" }
+
+  # ================================================================
+  # 具身智能 / 机器人
+  # ================================================================
+  embodied:
+    # -- A 层：国外原生 RSS（开箱可用）--
+    - { name: "The Robot Report",      url: "https://www.therobotreport.com/feed/", region: "global" }
+    - { name: "IEEE Spectrum 机器人",  url: "https://spectrum.ieee.org/feeds/topic/robotics.rss", region: "global" }
+    - { name: "Robohub",               url: "https://robohub.org/feed/",            region: "global" }
+    - { name: "New Atlas 机器人",       url: "https://newatlas.com/robotics/index.rss", region: "global" }
+    - { name: "TechCrunch 机器人",     url: "https://techcrunch.com/category/robotics/feed/", region: "global" }
+    - { name: "arXiv cs.RO 机器人",     url: "http://export.arxiv.org/rss/cs.RO",    region: "global" }
+    # -- B 层：国内源（需 RSSHub）--
+    # - { name: "机器之心", url: "${RSSHUB_BASE}/jiqizhixin/...", region: "cn" }
+    # - { name: "量子位",   url: "${RSSHUB_BASE}/qbitai/...",     region: "cn" }
+    # - { name: "雷锋网",   url: "${RSSHUB_BASE}/leiphone/...",   region: "cn" }
+
+  # ================================================================
+  # 数据 / AI 基础设施
+  # ================================================================
+  data:
+    # -- A 层：国外原生 RSS（开箱可用）--
+    - { name: "TechCrunch AI",   url: "https://techcrunch.com/category/artificial-intelligence/feed/", region: "global" }
+    - { name: "Ars Technica",    url: "https://feeds.arstechnica.com/arstechnica/index", region: "global" }
+    - { name: "The Verge",       url: "https://www.theverge.com/rss/index.xml", region: "global" }
+    - { name: "Wired",           url: "https://www.wired.com/feed/rss",       region: "global" }
+    # 2026-06-26 实测：403 Forbidden，暂不默认启用。
+    # - { name: "MarkTechPost",    url: "https://www.marktechpost.com/feed/",   region: "global" }
+    # 2026-06-26 实测：403 Forbidden，暂不默认启用。
+    # - { name: "Unite.AI",        url: "https://www.unite.ai/feed/",           region: "global" }
+    - { name: "Simon Willison",  url: "https://simonwillison.net/atom/everything/", region: "global" }
+    - { name: "arXiv cs.AI",     url: "http://export.arxiv.org/rss/cs.AI",    region: "global" }
+    # -- B 层：国内源（需 RSSHub）--
+    # - { name: "36氪",   url: "${RSSHUB_BASE}/36kr/...",   region: "cn" }
+    # - { name: "投中网", url: "${RSSHUB_BASE}/chinaventure/...", region: "cn" }
+    # - { name: "晚点LatePost", url: "${RSSHUB_BASE}/wechat/mp/profile/...", region: "cn" }
+
+email:
+  enabled: true
+  smtp_host: "smtp.163.com"   # 国内常用：QQ smtp.qq.com / 163 smtp.163.com / Gmail smtp.gmail.com
+  smtp_port: 465                # SSL 用 465；STARTTLS 用 587
+  smtp_user: "${SMTP_USER}"     # 发件邮箱地址，从环境变量读取
+  from_name: "TriBrief"
+  to:
+    - "your-email@163.com"       # 收件人，可多个
+
+output:
+  dir: "output"

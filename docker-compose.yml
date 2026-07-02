@@ -1,0 +1,11 @@
+# 一键本地运行：
+#   预览界面（不调 LLM、不发信）： docker compose run --rm tribrief --dry-run
+#   正式跑（抓取→打分→渲染→发信）： docker compose run --rm tribrief
+services:
+  tribrief:
+    build: .
+    image: tribrief:latest
+    env_file: .env            # 注入 LLM_API_KEY / SMTP_USER / SMTP_PASSWORD
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro   # 配置只读挂载
+      - ./output:/app/output                # 产出落盘到宿主机

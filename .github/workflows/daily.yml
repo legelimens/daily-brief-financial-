@@ -1,0 +1,108 @@
+name: TriBrief Daily
+
+# 触发方式：
+# 1) 定时：cron 使用 UTC。'0 0 * * *' = UTC 00:00 = 北京时间（UTC+8）08:00。
+#    若要改时间，按「北京时间 - 8 小时」换算成 UTC 填入。
+# 2) 手动：workflow_dispatch，便于随时测试。
+on:
+  schedule:
+    - cron: "0 0 * * *"   # 每天北京时间 08:00
+  workflow_dispatch: {}
+
+jobs:
+  run-briefing:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+
+      - name: 生成并发送简报
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+        run: python brief.py
+
+      - name: 上传简报 HTML 存档
+        if: always()              # 即使发信失败，HTML 也已落盘，便于排查
+        uses: actions/upload-artifact@v4
+        with:
+          name: briefing-html
+          path: output/*.html
+          if-no-files-found: ignore
+
+      # ----------------------------------------------------------------
+      # 失败告警：运行失败时发邮件通知（复用项目的 SMTP 配置）
+      # 需要在 Secrets 中额外配置 ALERT_TO（告警接收邮箱），
+      # 若不配则默认发到 SMTP_USER 自己。
+      # 如果团队用飞书/企业微信，可替换为 Webhook 方式（见下方注释）。
+      # ----------------------------------------------------------------
+      - name: 失败告警（邮件）
+        if: failure()
+        env:
+          SMTP_HOST: smtp.gmail.com
+          SMTP_PORT: "465"
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          ALERT_TO: ${{ secrets.ALERT_TO || secrets.SMTP_USER }}
+        run: |
+          python -c "
+          import smtplib, os, sys
+          from email.mime.text import MIMEText
+          from email.header import Header
+          from email.utils import formataddr
+
+          run_url = f'https://github.com/{os.environ[\"GITHUB_REPOSITORY\"]}/actions/runs/{os.environ[\"GITHUB_RUN_ID\"]}'
+          body = f'TriBrief 今日运行失败。\n\n请检查 GitHub Actions 日志：\n{run_url}'
+          msg = MIMEText(body, 'plain', 'utf-8')
+          msg['Subject'] = Header('[TriBrief] 简报生成失败', 'utf-8')
+          msg['From'] = formataddr(('TriBrief Alert', os.environ['SMTP_USER']))
+          msg['To'] = os.environ.get('ALERT_TO', os.environ['SMTP_USER'])
+
+          host = os.environ['SMTP_HOST']
+          port = int(os.environ.get('SMTP_PORT', '465'))
+          user = os.environ['SMTP_USER']
+          pwd = os.environ['SMTP_PASSWORD']
+
+          if not pwd:
+              print('SMTP_PASSWORD 未配置，跳过告警发送')
+              sys.exit(0)
+
+          if port == 465:
+              server = smtplib.SMTP_SSL(host, port, timeout=30)
+          else:
+              server = smtplib.SMTP(host, port, timeout=30)
+              server.starttls()
+          with server:
+              server.login(user, pwd)
+              server.sendmail(user, [msg['To']], msg.as_string())
+          print(f'告警邮件已发送至 {msg[\"To\"]}')
+          "
+
+      # ---- 备选：飞书 Webhook 告警（取消注释并配置 FEISHU_WEBHOOK_URL secret） ----
+      # - name: 失败告警（飞书）
+      #   if: failure()
+      #   env:
+      #     FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+      #   run: |
+      #     curl -X POST "$FEISHU_WEBHOOK_URL" \
+      #       -H "Content-Type: application/json" \
+      #       -d "{\"msg_type\":\"text\",\"content\":{\"text\":\"TriBrief 今日运行失败，请检查 GitHub Actions：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}}"
+
+      # ---- 备选：企业微信 Webhook 告警（取消注释并配置 WECOM_WEBHOOK_URL secret） ----
+      # - name: 失败告警（企业微信）
+      #   if: failure()
+      #   env:
+      #     WECOM_WEBHOOK_URL: ${{ secrets.WECOM_WEBHOOK_URL }}
+      #   run: |
+      #     curl -X POST "$WECOM_WEBHOOK_URL" \
+      #       -H "Content-Type: application/json" \
+      #       -d "{\"msgtype\":\"text\",\"text\":{\"content\":\"TriBrief 今日运行失败，请检查 GitHub Actions：${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}}"
