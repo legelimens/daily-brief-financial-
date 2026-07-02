@@ -89,6 +89,8 @@ email:
   to:
     - "13099766355@163.com"
     - "zhoutianyi@sunrise-ai.com"
+    - "x16@qq.com"
+    - "2373558758@qq.com"
 
 output:
   dir: "output"
