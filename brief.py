@@ -86,6 +86,7 @@ class ScoredItem:
     track: str              # 'chip' | 'embodied' | 'data' | 'drop'
     score: float            # 0-10
     summary_cn: str
+    position_cn: str        # 行业定位 / 横向对比
     angle_cn: str
     tier: str               # '一手' | '二手'
     conflict_note: str = ""
@@ -121,6 +122,10 @@ SCORE_SYSTEM_PROMPT = """\
   * 行业新闻评分参考(从高到低):重大融资/并购/估值变化 ≈ 9-10;重要技术突破/流片/标志性新品 ≈ 7-9;政策/出口管制 ≈ 6-8;关键人事/战略 ≈ 5-7;一般动态 ≈ 3-5;边缘信息 < 3。
   * 学术论文评分参考:里程碑式突破(如新架构/新范式) ≈ 8-10;显著改进 SOTA 或开辟新方向 ≈ 6-8;增量贡献 ≈ 3-5;与三赛道无关的基础研究 < 3。
 - "summary_cn": 中文摘要,客观陈述核心事实,不超过 80 字。必须包含关键数字（金额、估值、比例等）如果有的话。**摘要必须有主语**——对行业新闻,写清谁（公司/机构）做了什么;对学术论文,写清哪个团队/机构提出了什么,从输入的"作者/机构"字段获取,例如"斯坦福团队提出...""MIT 与 NVIDIA 联合发布..."而不能只写"提出""发布"。
+- "position_cn": 1-2 句行业定位/横向对比（约 50-100 字）,回答"这家公司/技术/产业在行业里处于什么位置"。要求:
+  * 点明其所处层级（本体、核心零部件、模型/数据、芯片/算力、基础设施、应用场景等）和成熟度（龙头、追赶者、细分冠军、早期验证、工具链补位等）。
+  * 尽量给出可比对象:全球领先版本、国内对应版本、同类上市公司、一级市场同赛道公司或上下游替代方案。
+  * 只基于输入信息和通用行业常识做稳健判断;如果信息不足,写清"可比对象有限"或"定位仍需更多披露验证",不要编造市场份额、客户或估值。
 - "angle_cn": 2-3 句投资视角点评（约 60-120 字）,回答"这件事对投资意味着什么"。要求:
   * 必须联系具体的公司、标的、估值或赛道,不能泛泛而谈。
   * 融资金额类:横向对比同赛道其他公司的估值,判断估值水位是否合理;指出哪些已上市公司或一级标的可能受影响。
@@ -318,7 +323,7 @@ def test_sources(sources: dict[str, list[dict[str, str]]]) -> dict[str, Any]:
         for src in src_list or []:
             name = src.get("name", "未命名源")
             url = src.get("url", "")
-            status = "??? "
+            status = "待测 "
             entries = 0
             err_msg = ""
             try:
@@ -340,7 +345,7 @@ def test_sources(sources: dict[str, list[dict[str, str]]]) -> dict[str, Any]:
                 fail += 1
 
             marker = {"✓ ": "\033[32m✓ \033[0m", "✗ ": "\033[31m✗ \033[0m",
-                       "空 ": "\033[33m○ \033[0m", "??? ": "?  "}.get(status, "?  ")
+                       "空 ": "\033[33m○ \033[0m", "待测 ": "…  "}.get(status, "…  ")
             print(f"    {marker} {name}")
             print(f"       {url}")
             if entries:
@@ -601,6 +606,7 @@ def score_and_enrich(items: list[Item], config: dict[str, Any]) -> list[ScoredIt
                 author=it.author,
                 track=track, score=score,
                 summary_cn=str(obj.get("summary_cn", "")).strip(),
+                position_cn=str(obj.get("position_cn", "")).strip(),
                 angle_cn=str(obj.get("angle_cn", "")).strip(),
                 tier=tier,
                 conflict_note=str(obj.get("conflict_note", "")).strip()))
@@ -704,7 +710,7 @@ def render_html(briefing: Briefing, config: dict[str, Any]) -> str:
 # ==================================================================
 # 发信
 # ==================================================================
-def send_email(html: str, config: dict[str, Any]) -> None:
+def send_email(html: str, config: dict[str, Any], date_str: str | None = None) -> None:
     """用 smtplib 发送 HTML 邮件。失败记录日志并抛出，便于上层置非零退出码。"""
     ecfg = config["email"]
     if not ecfg.get("enabled", False):
@@ -718,7 +724,7 @@ def send_email(html: str, config: dict[str, Any]) -> None:
     if not recipients:
         raise RuntimeError("config.email.to 为空，无收件人")
 
-    date_str = datetime.now(BEIJING_TZ).strftime("%Y-%m-%d")
+    date_str = date_str or datetime.now(BEIJING_TZ).strftime("%Y-%m-%d")
     msg = MIMEText(html, "html", "utf-8")
     msg["Subject"] = Header(f"投研简报 · {date_str}", "utf-8")
     msg["From"] = formataddr((str(Header(ecfg.get("from_name", "TriBrief"), "utf-8")), user))
@@ -757,6 +763,7 @@ def _sample_scored_items() -> list[ScoredItem]:
             published=ago(6), source_name="The Robot Report", region="global",
             track_hint="embodied", track="embodied", score=8.5,
             summary_cn="Bear Robotics 宣布收购英国 Kinisi Robotics，获得其 KR1 人形机器人及配套操作训练数据能力。",
+            position_cn="Bear 原本偏商用服务机器人，Kinisi 补足人形本体与数据能力；对标 Figure、Agility，更像从场景运营向具身平台补位。",
             angle_cn="服务机器人公司向人形+数据栈延伸，数据资产成并购核心标的，提示具身赛道并购逻辑由本体转向数据闭环。",
             tier="一手", conflict_note=""),
         ScoredItem(
@@ -765,6 +772,7 @@ def _sample_scored_items() -> list[ScoredItem]:
             published=ago(10), source_name="Reuters", region="global",
             track_hint="embodied", track="embodied", score=8.0,
             summary_cn="德国具身机器人公司 Neura Robotics 完成 C 轮融资，投资方包括亚马逊与英伟达。",
+            position_cn="Neura 属于欧洲人形与协作机器人代表，资本阵容接近 Figure 的产业绑定路线；国内可对比智元、宇树等本体公司。",
             angle_cn="顶级产业资本入局欧洲人形机器人，强化英伟达具身生态卡位；估值口径需先核实再判断水位。",
             tier="一手",
             conflict_note="估值存在 70 亿美元与 40 亿欧元两种口径，差异显著，需以官方为准。"),
@@ -774,6 +782,7 @@ def _sample_scored_items() -> list[ScoredItem]:
             published=ago(20), source_name="雷峰网", region="cn",
             track_hint="chip", track="chip", score=7.0,
             summary_cn="沐曦股份与优必选成立合资公司曦选创智，切入国产具身智能芯片。",
+            position_cn="曦选创智处在具身算力芯片层，试图用国产 GPU 绑定机器人本体客户；全球参照是 NVIDIA Jetson/Isaac 生态。",
             angle_cn="国产 GPU 厂商绑定头部人形机器人客户，以场景换订单，利好国产算力在具身落地的确定性。",
             tier="二手", conflict_note=""),
         ScoredItem(
@@ -782,6 +791,7 @@ def _sample_scored_items() -> list[ScoredItem]:
             published=ago(28), source_name="Tom's Hardware", region="global",
             track_hint="chip", track="chip", score=6.5,
             summary_cn="有报道称美光 HBM4 可能在英伟达下一代 Vera Rubin 平台获得更高供货份额。",
+            position_cn="美光处在 HBM 供应链追赶位置，领先者仍是 SK 海力士与三星；若份额提升，意味着 AI 存储不再是单一龙头格局。",
             angle_cn="HBM 供给格局向美光倾斜，影响 SK 海力士/三星份额预期，关注存储端在 AI 算力链的议价能力变化。",
             tier="二手", conflict_note=""),
         ScoredItem(
@@ -790,6 +800,7 @@ def _sample_scored_items() -> list[ScoredItem]:
             published=ago(30), source_name="36氪", region="cn",
             track_hint="data", track="data", score=6.5,
             summary_cn="数据显示国内具身智能 5 月融资额环比下降近六成，资金更多流向数据采集与基础设施。",
+            position_cn="数据采集与基础设施位于本体公司的上游工具层，国内对应遥操作、仿真和数据闭环服务商，成熟度低于芯片和本体融资主线。",
             angle_cn="一级市场由本体热转向数据层，提示具身投资进入冷静期，数据/遥操作/仿真类标的相对受青睐。",
             tier="二手", conflict_note=""),
         ScoredItem(
@@ -798,6 +809,7 @@ def _sample_scored_items() -> list[ScoredItem]:
             published=ago(40), source_name="MarkTechPost", region="global",
             track_hint="data", track="data", score=6.2,
             summary_cn="新发布的开源遥操作数据集覆盖多种家庭操作任务，降低真机数据采集成本。",
+            position_cn="开源遥操作数据集处在具身模型训练底层资产，商业公司可对比 Physical Intelligence、1X 等数据闭环路线。",
             angle_cn="数据采集成本下降利好长尾具身创业者，但也压缩纯数据采集/标注类公司的稀缺性溢价。",
             tier="二手", conflict_note=""),
     ]
@@ -862,6 +874,9 @@ def main() -> int:
     items = fetch_all(config.get("sources", {}), hours)
     deduped = dedupe(items)
     scored = score_and_enrich(deduped, config)
+    if deduped and not scored:
+        logger.error("已抓取 %d 条新闻，但没有任何条目完成分析；停止生成和发信", len(deduped))
+        return 1
     briefing = build_briefing(scored, config, dry_run=False)
     html = render_html(briefing, config)
 
@@ -870,7 +885,7 @@ def main() -> int:
         return 0
 
     try:
-        send_email(html, config)
+        send_email(html, config, briefing.date)
     except Exception:  # noqa: BLE001 已在 send_email 内记录
         logger.error("发信环节失败，HTML 已落盘，置非零退出码")
         return 1
