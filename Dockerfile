@@ -9,6 +9,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # 再拷贝源码与模板
 COPY brief.py .
+COPY news_pipeline.py .
 COPY templates/ ./templates/
 
 # 运行时挂载 config.yaml 与 output/，密钥用 env 注入

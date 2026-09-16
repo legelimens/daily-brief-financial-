@@ -4,6 +4,7 @@
 # 运行产物
 output/
 *.log
+state/
 
 # Python
 __pycache__/

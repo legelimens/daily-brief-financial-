@@ -1,5 +1,9 @@
 name: TriBrief Daily
 
+concurrency:
+  group: ai-data-daily
+  cancel-in-progress: false
+
 # 触发方式：
 # 1) 定时：cron 使用 UTC。'0 0 * * *' = UTC 00:00 = 北京时间（UTC+8）08:00。
 #    若要改时间，按「北京时间 - 8 小时」换算成 UTC 填入。
@@ -24,6 +28,13 @@ jobs:
       - name: 安装依赖
         run: pip install -r requirements.txt
 
+      - name: 恢复已发送记录
+        uses: actions/cache/restore@v4
+        with:
+          path: state
+          key: daily-history-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: daily-history-
+
       - name: 生成并发送简报
         env:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
@@ -31,12 +42,21 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
         run: python brief.py
 
+      - name: 保存已发送记录
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: state
+          key: daily-history-${{ github.run_id }}-${{ github.run_attempt }}
+
       - name: 上传简报 HTML 存档
         if: always()              # 即使发信失败，HTML 也已落盘，便于排查
         uses: actions/upload-artifact@v4
         with:
           name: briefing-html
-          path: output/*.html
+          path: |
+            output/*.html
+            output/*.json
           if-no-files-found: ignore
 
       # ----------------------------------------------------------------
@@ -48,14 +68,12 @@ jobs:
       - name: 失败告警（邮件）
         if: failure()
         env:
-          SMTP_HOST: smtp.gmail.com
-          SMTP_PORT: "465"
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           ALERT_TO: ${{ secrets.ALERT_TO || secrets.SMTP_USER }}
         run: |
           python -c "
-          import smtplib, os, sys
+          import smtplib, os, sys, yaml
           from email.mime.text import MIMEText
           from email.header import Header
           from email.utils import formataddr
@@ -67,8 +85,10 @@ jobs:
           msg['From'] = formataddr(('TriBrief Alert', os.environ['SMTP_USER']))
           msg['To'] = os.environ.get('ALERT_TO', os.environ['SMTP_USER'])
 
-          host = os.environ['SMTP_HOST']
-          port = int(os.environ.get('SMTP_PORT', '465'))
+          with open('config.yaml', encoding='utf-8') as config_file:
+              email_config = yaml.safe_load(config_file)['email']
+          host = email_config['smtp_host']
+          port = int(email_config.get('smtp_port', 465))
           user = os.environ['SMTP_USER']
           pwd = os.environ['SMTP_PASSWORD']
 

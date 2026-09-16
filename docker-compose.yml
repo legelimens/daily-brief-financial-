@@ -9,3 +9,4 @@ services:
     volumes:
       - ./config.yaml:/app/config.yaml:ro   # 配置只读挂载
       - ./output:/app/output                # 产出落盘到宿主机
+      - ./state:/app/state                  # 已发送事件记录

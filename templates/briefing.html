@@ -2,8 +2,7 @@
 <html lang="zh-CN" xmlns="http://www.w3.org/1999/xhtml">
 {# ---- 赛道元数据：名称 / 主色 / 浅色背景 / 浅色块文字色 ---- #}
 {% set track_meta = {
-  'chip':     {'name': '芯片 / 算力',       'color': '#27864F', 'soft': '#EDF8F1', 'softtext': '#1F6F42'},
-  'embodied': {'name': '具身智能 / 机器人', 'color': '#2563EB', 'soft': '#EEF4FF', 'softtext': '#1D4ED8'},
+  'ai': {'name': 'AI', 'color': '#2563EB', 'soft': '#EEF4FF', 'softtext': '#1D4ED8'},
   'data':     {'name': '数据',             'color': '#C76A1B', 'soft': '#FFF3E8', 'softtext': '#A35312'}
 } %}
 {# ---- 评分圆点：>=8.5 三点 / >=6.5 两点 / 否则一点 ---- #}
@@ -18,7 +17,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="x-apple-disable-message-reformatting">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <title>投研速览 · TriBrief</title>
+  <title>AI 与数据日报 · TriBrief</title>
   <style>
     /* 仅 Apple Mail / Gmail 等支持 <style> 的客户端生效；关键样式仍走 inline */
     body { margin: 0; padding: 0; background-color: #F4F5F7; }
@@ -54,7 +53,7 @@
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td align="left" valign="bottom">
-                    <span style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Roboto,Helvetica,Arial,sans-serif;font-size:21px;font-weight:750;color:#111827;letter-spacing:0;">投研速览</span>
+                    <span style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Roboto,Helvetica,Arial,sans-serif;font-size:21px;font-weight:750;color:#111827;letter-spacing:0;">AI 与数据日报</span>
                     <span style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:13px;font-weight:600;color:#8E8E93;margin-left:6px;">/ TriBrief</span>
                   </td>
                   <td align="right" valign="bottom">
@@ -77,7 +76,7 @@
                     <div class="hl-text" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.7;color:#111827;margin-top:8px;white-space:pre-line;">{{ b.highlights }}</div>
                     {% set fm = track_meta[b.focus_track] %}
                     <div style="margin-top:14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Roboto,Helvetica,Arial,sans-serif;font-size:13px;color:#6E6E73;">
-                      重点赛道
+                      重点栏目
                       <span style="display:inline-block;background-color:{{ fm.soft }};color:{{ fm.softtext }};font-size:12px;font-weight:700;padding:4px 10px;border-radius:10px;margin-left:6px;">{{ fm.name }}</span>
                     </div>
                   </td>
@@ -86,7 +85,7 @@
             </td>
           </tr>
 
-          <!-- 三个赛道分区 -->
+          <!-- AI 与数据分区 -->
           {% for track in track_order %}
           {% set meta = track_meta[track] %}
           {% set items = b.groups[track] %}
@@ -105,6 +104,12 @@
 
               {% if items %}
               {% for item in items %}
+              {% if item.supplemental and (loop.first or not items[loop.index0-1].supplemental) %}
+              <h3 style="font-size:15px;color:#A35312;margin:18px 0 8px;">重要补充 · {{ b.supplement_label }}</h3>
+              {% endif %}
+              {% if loop.first or item.region != items[loop.index0-1].region or item.supplemental != items[loop.index0-1].supplemental %}
+              <h3 style="font-size:14px;color:#475569;margin:12px 0;">{{ {'cn':'国内','global':'国外','mixed':'跨国动态','unknown':'地区待核实'}.get(item.region, '地区待核实') }}</h3>
+              {% endif %}
               <!-- 新闻卡片 -->
               <table role="presentation" class="news-card" width="100%" cellpadding="0" cellspacing="0" border="0"
                      style="background-color:#FFFFFF;border:1px solid #E6E8EE;border-radius:13px;margin-bottom:12px;">
@@ -114,7 +119,8 @@
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                       <tr>
                         <td align="left" valign="middle" class="small-meta" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Roboto,Helvetica,Arial,sans-serif;font-size:12px;color:#64748B;line-height:1.5;">
-                          {{ item.published.strftime('%m/%d') if item.published else '—' }}
+                          {{ display_date(item) if item.published else '日期待核实' }}{% if item.date_only %}（仅日期）{% endif %}
+                          {% if item.supplemental %}&nbsp;·&nbsp; 重要补充{% endif %}
                           &nbsp;·&nbsp; {{ item.source_name }} &nbsp;·&nbsp;
                           {% if item.tier == '一手' %}
                           <span style="display:inline-block;background-color:#E7F7ED;color:#1F6F42;font-size:11px;font-weight:700;padding:1px 7px;border-radius:8px;">一手</span>
@@ -143,9 +149,9 @@
                     </div>
                     {% endif %}
 
-                    <!-- 投资含义高亮块 -->
+                    <!-- 影响分析高亮块 -->
                     <div style="background-color:{{ meta.soft }};border-left:3px solid {{ meta.color }};border-radius:10px;padding:10px 12px;margin-top:10px;">
-                      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Roboto,Helvetica,Arial,sans-serif;font-size:11px;font-weight:750;color:{{ meta.softtext }};letter-spacing:0.5px;">投资含义</div>
+                      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Roboto,Helvetica,Arial,sans-serif;font-size:11px;font-weight:750;color:{{ meta.softtext }};letter-spacing:0.5px;">影响分析</div>
                       <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Roboto,Helvetica,Arial,sans-serif;font-size:13px;line-height:1.65;color:#1F2937;margin-top:4px;">{{ item.angle_cn }}</div>
                     </div>
 
@@ -172,6 +178,17 @@
             <td class="px" style="padding:8px 28px 26px 28px;">
               <div style="height:1px;background-color:#E5E5EA;margin-bottom:14px;line-height:1px;font-size:0;">&nbsp;</div>
               <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',Roboto,Helvetica,Arial,sans-serif;font-size:12px;line-height:1.6;color:#A1A1A6;">
+                {% if b.preview %}<strong>预览 · 未发送邮件</strong><br>{% endif %}
+                {% if b.cutoff %}新闻截止 {{ b.cutoff }}<br>{% endif %}
+                {% for track in track_order %}
+                  {% for region, label in [('cn','国内'),('global','国外')] %}
+                    {% if not b.groups[track]|selectattr('region','equalto',region)|list %}
+                    {{ track_meta[track].name }} · {{ label }}：本次无合格入选条目，可能受来源覆盖影响。<br>
+                    {% endif %}
+                  {% endfor %}
+                {% endfor %}
+                {% if b.coverage %}来源检查：{{ b.coverage|selectattr('status','equalto','ok')|list|length }}/{{ b.coverage|length }} 正常<br>
+                {% for source in b.coverage %}{% if source.status != 'ok' %}{{ source.name }}：{{ {'failed':'抓取失败','empty':'未解析出条目','undated':'未取得可信发布日期'}.get(source.status, '来源异常') }}<br>{% endif %}{% if source.body_failures %}{{ source.name }}：{{ source.body_failures }} 条正文获取失败<br>{% endif %}{% endfor %}{% endif %}
                 生成于 {{ generated_at }} · 由 TriBrief 自动生成<br>
                 信息仅供参考，请以原始来源为准。
               </div>

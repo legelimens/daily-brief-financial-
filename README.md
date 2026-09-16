@@ -1,246 +1,106 @@
-# TriBrief
+# AI 与数据日报（TriBrief）
 
-TriBrief 是一个轻量三赛道投研简报系统。它每天从 RSS 源抓取芯片/算力、具身智能/机器人、数据三个方向的新闻，用 OpenAI 兼容 LLM 做赛道判定、重要性打分、中文摘要和投资视角点评，然后渲染为 HTML 邮件并推送。
+每天采集国内外 AI 和数据新闻，生成中文摘要、简短影响分析和 HTML 邮件。
+目标每天15–20条：AI最多12条、数据最多8条；两栏优先选国内、国外各2条合格新闻，不足不凑数。
+主新闻为最近24小时；栏目未满时可补24–48小时的重要漏报，每栏最多2条，明确标为“重要补充”。
 
-设计目标是：依赖少、流程清楚、可 Docker 复现、可 GitHub Actions 定时运行。
+## 内容范围
 
-## 特性
+- AI：大模型、多模态、智能体、应用、开源工具、重要研究与政策。
+- 数据：数据集、采集标注、合成数据、数据库、数据工程、湖仓、治理、安全隐私、数据要素及交易。
+- 芯片和机器人不独立成栏，直接影响上述领域的重要事件仍可入选。
+- 过滤营销、教程、回顾、无实质进展的会议，融资不自动优先。
+- “早报｜…”等混合多事件的汇总页不作为单条新闻入选，避免重复拼盘挤占名额。
+- 国内外按事件主体或所在地判断，与媒体地区分开；跨国和未知单列。
 
-- 三赛道聚焦：芯片/算力、具身智能/机器人、数据。
-- 轻量依赖：只使用 `feedparser`、`requests`、`jinja2`、`pyyaml`、`python-dateutil`。
-- LLM 接口开放：支持 DeepSeek、OpenAI、豆包、Ollama 等 OpenAI 兼容 `/chat/completions` 接口。
-- 邮件友好 HTML：table 布局、inline 样式、移动端适配。
-- 安全配置：API Key 和 SMTP 密码只从环境变量读取。
-- 本地预览：`--dry-run` 不调用 LLM、不发邮件，只生成示例 HTML。
+## 使用
 
-## 效果预览
+建议Python 3.11+：`pip install -r requirements.txt`。
+复制 `.env.example` 为 `.env`，设置 `LLM_API_KEY`、`SMTP_USER`、`SMTP_PASSWORD`。
+`config.yaml` 保留原模型与邮件设置。不要把密钥写入配置。
 
-运行 dry-run 后会生成：
+当前模型为 DeepSeek `deepseek-chat`，接口根地址 `https://api.deepseek.com/v1`。
+本地 `.env` 的 `LLM_API_KEY` 应填写 DeepSeek 密钥；远端运行前也需要更新 GitHub 的同名 Secret。
+每批5条，批次间隔2秒，通过 `ai.batch_size`、`ai.request_interval_seconds` 调整。切换其他兼容模型时可选配 `ai.thinking`。
+429退避重试耗尽后停止后续批次，不自动切换模型。智谱错误1305表示模型当前访问量过大，可稍后重试。
+输出被截断时会提高输出上限重试，仍失败则拆小批次；完整分析批次缓存于 `output/analysis_cache`。模型、提示词或新闻材料变化会使用不同缓存，失败结果不写入缓存。
 
 ```powershell
+# 虚构版式预览：无模型调用、无邮件
 python brief.py --dry-run
-```
-
-输出文件位于：
-
-```text
-output/briefing_YYYY-MM-DD.html
-```
-
-当前仓库已有一份示例产物：`output/briefing_2026-06-26.html`。
-
-## 工作流程
-
-```text
-RSS 源抓取
-  -> 标准化标题、摘要、发布时间
-  -> URL 与标题去重
-  -> LLM 判定赛道、评分、摘要、投资视角
-  -> 按赛道分组并限量
-  -> LLM 生成今日要点
-  -> Jinja2 渲染 HTML
-  -> SMTP 发送邮件
-```
-
-## 快速开始
-
-建议使用 Python 3.11+。
-
-```powershell
-python -m pip install -r requirements.txt
-```
-
-预览界面，不调用 LLM、不发邮件：
-
-```powershell
-python brief.py --dry-run
-```
-
-正常抓取并生成 HTML，但不发邮件：
-
-```powershell
+# 订阅与网页来源实测：无模型调用、无邮件
+python brief.py --test-sources
+# 真实新闻预览：调用模型，不发邮件、不写发送历史
 python brief.py --no-email
-```
-
-正式运行：
-
-```powershell
+# 正式运行：发送成功后写历史
 python brief.py
+# 手动扩大窗口，邮件会标明实际窗口
+python brief.py --hours 48 --no-email
 ```
 
-可选参数：
+输出为 `output/briefing_YYYY-MM-DD.html`、`output/sources.json`、`output/candidates.json` 和 `output/selected_YYYY-MM-DD.json`。
+同一天的示例、预览和正式HTML使用同名文件，后一次会覆盖前一次。
+
+## 来源验证
+
+2026-09-15本机实测，保持证书校验，加载系统信任证书。以下为快照，不代表长期可用。
+
+| 来源 | 接入 | 解析条数 | 最近24小时（限量前） |
+|---|---|---:|---:|
+| IT之家 | RSS | 60 | 60 |
+| 爱范儿 | RSS | 20 | 4 |
+| 雷峰网 | RSS | 20 | 12 |
+| TechCrunch AI | RSS | 20 | 11 |
+| Google DeepMind | 官方RSS | 100 | 0 |
+| Hugging Face | 官方平台RSS | 862 | 0 |
+| 国家数据局 | 列表与正文 | 25 | 3 |
+| Databricks | 列表与正文 | 12 | 1 |
+| PingCAP | 官方RSS | 10 | 0 |
+| MongoDB | 官方RSS | 50 | 0 |
+
+量子位返回403，机器之心候选RSS返回网页，36氪解析0条，均未启用。
+RSSHub不是默认依赖。新增来源应先核对文章链接、发布日期、正文和更新频率。
+
+2026-09-16新增6个已解析出条目的来源：钛媒体（17条）、InfoQ中文（20条）、开源中国（50条）、InfoQ国际（15条）、Elastic（40条）、KDnuggets（10条）。这些是订阅总条数，并非全部符合新闻时间窗口。
+BigDataWire/Datanami返回403；本次测试的Snowflake、Confluent和PingCAP中文RSS地址返回404，未启用。
+
+## 时效、质量与历史
+
+- 只采用发布时间，不用更新时间将旧文章变成新闻；无日期与未来日期排除。
+- 网页只有日期时标明“仅日期”，按配置时区当天零点保守过滤，不伪造时分。
+- 短摘要补采正文，每条最多6000字符进入模型；事实与影响分析分开，缺少证据时不推断竞品、估值或商业化时间。
+- URL/标题先去重，再由模型生成跨语言事件标识，合并同次和历史事件；实质新进展使用新标识。
+- 模型语义去重可能漏判或误判，不等同于全网事实核查。
+- 默认开启跨批次终审，合并跨媒体、跨栏目的同一事件并校正分类，决策记录在 `output/editorial_review.json`；终审失败会停止生成和发信。不同产品和实质新进展分别保留。
+- 默认14天历史位于 `state/sent.json`，预览不写；历史损坏不静默重置。
+- 抓取异常、地区缺口和截止时间在邮件中显示；分析缺项停止发信，正常分析后全部过滤可生成空栏。
+- 没有候选且来源异常时停止发信，避免把采集失败误报为没有新闻。
+- 主栏评分门槛5.5分；补充新闻至少6.5分，每栏最多2条，不能挤掉合格的24小时新闻。
+- `--hours`调整主窗口；采集窗口取主窗口与 `supplement_window_hours` 的较大值。无合格补充时不凑数。
+- 已有成功试发回执会按收件人、文件摘要与日期验证，回执中的原文链接参与排重，避免昨天试发内容被重新补入。试发回执只支持链接排重，跨媒体事件仍依赖模型标识。
+
+## 配置与部署
+
+`filtering.max_per_track` 当前为 `{ai: 12, data: 8}`；`min_per_region` 控制国内外目标数量。
+`supplement_window_hours: 48`、`supplement_max_per_track: 2`、`supplement_score_threshold: 6.5`控制补充规则。
+默认配置多数来源最多25条候选，IT之家40条、开源中国30条；两者按标题主题词优先取候选，再交模型判断，避免通用科技资讯先占满候选名额。源条目仍可由模型重新分类。
+网页源使用 `type: html`、`selector`、`link_pattern`、`timezone_hours`、`max_articles`。
+`kind: official` 只是来源提示，官方转载不自动为一手。
 
 ```powershell
-python brief.py --hours 48
-python brief.py --config config.yaml
+docker compose run --rm tribrief --no-email
 ```
 
-## 环境变量
+Docker挂载配置、`output/`和`state/`，凭据通过 `.env` 注入。
+GitHub Actions每日北京时间08:00（日本09:00）运行，支持手动触发。在仓库Secrets设置上述三个环境变量。
+Actions Cache恢复/保存发送历史，工作流串行执行。缓存过期或被清除可能丢失历史，本地和远端历史不自动共享。
+SMTP与历史文件不是原子事务：发送成功后崩溃、响应不明或缓存保存失败仍可能重复，需查运行日志。
+配置文件随仓库提交，注意收件人隐私。更新本地工作流不代表已经远端部署或验证邮件投递。
 
-复制 `.env.example` 为 `.env`，或在系统环境变量中配置：
+## 测试
 
-```text
-LLM_API_KEY=
-SMTP_USER=
-SMTP_PASSWORD=
-```
+另装pytest后运行 `python -m pytest -q`。
+覆盖旧闻、无日期、未来日期、历史去重与新进展、历史过期/损坏、国内外配额、模型缺项/全过滤、预览不发送不记账。
+实际邮件客户端投递仍需单独验证。
 
-说明：
-
-- `LLM_API_KEY`：OpenAI 兼容服务的 API Key。
-- `SMTP_USER`：发件邮箱账号。
-- `SMTP_PASSWORD`：SMTP 授权码或密码。
-
-## 配置说明
-
-主配置文件是 `config.yaml`。建议先复制示例：
-
-```powershell
-Copy-Item config.example.yaml config.yaml
-```
-
-关键字段：
-
-- `ai.base_url`：OpenAI 兼容接口根地址，例如 `https://api.deepseek.com/v1`。
-- `ai.model`：模型名，例如 `deepseek-chat`。
-- `ai.api_key_env`：读取 API Key 的环境变量名，默认 `LLM_API_KEY`。
-- `filtering.time_window_hours`：抓取最近多少小时。
-- `filtering.score_threshold`：低于该分数的条目丢弃。
-- `filtering.max_per_track`：每个赛道最多保留几条。
-- `sources`：按赛道配置 RSS 源。
-- `email`：SMTP 和收件人配置。
-- `output.dir`：HTML 输出目录。
-
-## Docker 运行
-
-预览界面：
-
-```powershell
-docker compose run --rm tribrief --dry-run
-```
-
-正式运行：
-
-```powershell
-docker compose run --rm tribrief
-```
-
-`docker-compose.yml` 会挂载：
-
-- `./config.yaml:/app/config.yaml:ro`
-- `./output:/app/output`
-
-密钥通过 `.env` 注入。
-
-## GitHub Actions 定时部署
-
-工作流文件位于 `.github/workflows/daily.yml`。
-
-触发方式：
-
-- 每天 UTC 00:00，即北京时间 08:00。
-- 支持 `workflow_dispatch` 手动触发。
-
-需要在仓库 Settings -> Secrets and variables -> Actions 中配置：
-
-```text
-LLM_API_KEY
-SMTP_USER
-SMTP_PASSWORD
-```
-
-运行结束后会上传 `output/*.html` 作为 artifact，便于排查邮件发送问题。
-
-## 中文源接入 RSSHub
-
-国内媒体原生 RSS 不稳定，建议自建 RSSHub：
-
-```powershell
-docker run -d --name rsshub -p 1200:1200 diygod/rsshub
-```
-
-本地访问：
-
-```text
-http://localhost:1200
-```
-
-生产环境建议部署到自己的服务器，然后在 `config.yaml` 中填入：
-
-```yaml
-sources:
-  embodied:
-    - { name: "机器之心", url: "https://你的rsshub域名/jiqizhixin/...", region: "cn" }
-```
-
-具体路由以 RSSHub 官方文档为准：`https://docs.rsshub.app`。微信公众号、付费墙和部分创投数据库抓取稳定性较差，建议把 RSSHub 国内源作为补充层，而不是唯一信息源。
-
-## 自定义
-
-新增 RSS 源：
-
-```yaml
-sources:
-  chip:
-    - { name: "新来源", url: "https://example.com/feed.xml", region: "global" }
-```
-
-调高过滤强度：
-
-```yaml
-filtering:
-  score_threshold: 6.5
-  max_per_track: 4
-```
-
-关闭邮件，只生成 HTML：
-
-```yaml
-email:
-  enabled: false
-```
-
-## 源状态
-
-当前配置中的 A 层英文 RSS 源需要在目标运行环境中定期复测。RSS 源长期可能改版、限流或返回空条目。
-
-最近一次本地实测：2026-06-26。检查方式为 `requests` 拉取后交给 `feedparser` 解析。
-
-| 赛道 | 来源 | 状态 |
-|---|---|---|
-| 芯片/算力 | IEEE Spectrum 半导体 | 可用，30 条 |
-| 芯片/算力 | SemiWiki | 可用，5 条 |
-| 芯片/算力 | EE Times | 可用，10 条 |
-| 芯片/算力 | EDN | 可用，10 条 |
-| 芯片/算力 | Semiconductor Today | HTTP 200 但无条目，已在默认配置中注释 |
-| 芯片/算力 | Tom's Hardware | 可用，50 条 |
-| 芯片/算力 | TechXplore 半导体 | 可用，30 条 |
-| 芯片/算力 | arXiv cs.AR 硬件架构 | 可用，17 条 |
-| 具身智能/机器人 | The Robot Report | 可用，15 条 |
-| 具身智能/机器人 | IEEE Spectrum 机器人 | 可用，30 条 |
-| 具身智能/机器人 | Robohub | 可用，75 条 |
-| 具身智能/机器人 | New Atlas 机器人 | 可用，60 条 |
-| 具身智能/机器人 | TechCrunch 机器人 | 可用，20 条 |
-| 具身智能/机器人 | TechXplore 机器人 | 可用，30 条 |
-| 具身智能/机器人 | arXiv cs.RO 机器人 | 可用，84 条 |
-| 数据 | TechCrunch AI | 可用，20 条 |
-| 数据 | Ars Technica | 可用，20 条 |
-| 数据 | The Verge | 可用，10 条 |
-| 数据 | Wired | 可用，50 条 |
-| 数据 | MarkTechPost | 403 Forbidden，已在默认配置中注释 |
-| 数据 | Unite.AI | 403 Forbidden，已在默认配置中注释 |
-| 数据 | Simon Willison | 可用，30 条 |
-| 数据 | arXiv cs.AI | 可用，277 条 |
-
-## 成本
-
-成本主要来自 LLM 调用。以 DeepSeek 等低价 OpenAI 兼容模型为例，几十到一两百条 RSS 条目的每日摘要通常是很低的量级。若源数量明显增加，可通过以下方式控制成本：
-
-- 调小 `time_window_hours`。
-- 调高 `score_threshold`。
-- 减少噪音大的综合科技源。
-- 保持每批最多 15 条左右，降低单次上下文压力。
-
-## 许可
-
-本项目目前未附带独立许可证。如需开源发布，请先补充合适的 License。
+`tribrief-build-spec.md`保留为历史构建记录，当前范围以本README和配置为准。许可证见 LICENSE。
